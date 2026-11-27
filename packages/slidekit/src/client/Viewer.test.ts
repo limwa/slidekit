@@ -7,7 +7,7 @@ import * as Position from "../Position.ts"
 import type { State } from "../protocol.ts"
 import * as Slide from "../Slide.ts"
 import { routeOf, ViewerRoute } from "./routes.ts"
-import { Reload, SendGoto } from "./SyncClient.ts"
+import { Reload } from "./SyncClient.ts"
 import { Viewer, ViewerMessage } from "./Viewer.ts"
 
 const deck = Deck.make({
@@ -24,8 +24,7 @@ const state = (position: Position.Position, presenterLive = true, buildId = "bui
   buildId
 })
 
-const start = (role: "presenter" | "viewer", position = at(0, 0)) =>
-  Story.make(Viewer(deck), { route: routeOf(position), host: "deck.test", role, buildId: "build-1" })
+const start = (position = at(0, 0)) => Story.make(Viewer(deck), { route: routeOf(position), host: "deck.test", buildId: "build-1" })
 
 type Steps = Effect.Success<ReturnType<typeof start>>
 
@@ -43,7 +42,7 @@ const shown = (s: Steps) => Position.parse(deck, s.model.route.params["*"])
 describe("Viewer sync", () => {
   it.effect("moves freely until a presenter is live, then follows it", () =>
     Effect.gen(function*() {
-      const s = yield* start("viewer")
+      const s = yield* start()
       s.send(ViewerMessage.RequestedNext())
       routed(s, at(0, 1))
       expect(s.model.mode._tag).toBe("Free")
@@ -61,7 +60,7 @@ describe("Viewer sync", () => {
 
   it.effect("keeps following when States arrive faster than the route changes", () =>
     Effect.gen(function*() {
-      const s = yield* start("viewer")
+      const s = yield* start()
       received(s, state(at(0, 1)))
       const first = Router.replace(ViewerRoute, routeOf(at(0, 1)))
       s.expectExact(first).resolve(first, "navigated")
@@ -78,7 +77,7 @@ describe("Viewer sync", () => {
 
   it.effect("detaches on navigation and stops following", () =>
     Effect.gen(function*() {
-      const s = yield* start("viewer")
+      const s = yield* start()
       received(s, state(at(1, 0)))
       routed(s, at(1, 0))
 
@@ -94,7 +93,7 @@ describe("Viewer sync", () => {
 
   it.effect("goes back to live at the presenter's position", () =>
     Effect.gen(function*() {
-      const s = yield* start("viewer")
+      const s = yield* start()
       received(s, state(at(1, 0)))
       routed(s, at(1, 0))
       s.send(ViewerMessage.ClickedDot({ slide: 0 }))
@@ -112,7 +111,7 @@ describe("Viewer sync", () => {
   it.effect("stays put and moves freely when the presenter stops being live", () =>
     Effect.gen(function*() {
       for (const detach of [false, true]) {
-        const s = yield* start("viewer")
+        const s = yield* start()
         received(s, state(at(1, 0)))
         routed(s, at(1, 0))
         if (detach) {
@@ -134,33 +133,9 @@ describe("Viewer sync", () => {
 
   it.effect("reloads when the room runs another build", () =>
     Effect.gen(function*() {
-      const s = yield* start("viewer", at(1, 0))
+      const s = yield* start(at(1, 0))
       received(s, state(at(2, 0), true, "build-2"))
       s.expectExact(Reload.make({})).resolve(Reload, Component.noop)
-      expect(shown(s)).toEqual(at(1, 0))
-    }).pipe(Effect.scoped))
-
-  it.effect("presenter takes the room's position when it joins, then moves the room", () =>
-    Effect.gen(function*() {
-      const s = yield* start("presenter")
-      // Moves before joining stay local, so a fresh /present tab can't yank the room back to the start.
-      s.send(ViewerMessage.RequestedNext())
-      routed(s, at(0, 1))
-      s.expectNone()
-
-      received(s, state(at(2, 0)))
-      routed(s, at(2, 0))
-      s.expectExact(SendGoto.make({ position: at(2, 0) })).resolve(SendGoto, Component.noop)
-      expect(s.model.mode._tag).toBe("Presenting")
-
-      s.send(ViewerMessage.RequestedPrevious())
-      routed(s, at(1, 0))
-      s.expectExact(SendGoto.make({ position: at(1, 0) })).resolve(SendGoto, Component.noop)
-
-      // A late echo of an older position doesn't move the presenter back.
-      received(s, state(at(2, 0)))
-      s.expectNone()
-      expect(s.model.mode._tag).toBe("Presenting")
       expect(shown(s)).toEqual(at(1, 0))
     }).pipe(Effect.scoped))
 })

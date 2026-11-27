@@ -9,22 +9,23 @@ const decodeServer = Schema.decodeUnknownOption(ServerWire)
 
 /**
  * The client's socket to the room. It is open while something listens to `states`, says Hello on every connect and
- * reconnects every second. The Worker decides the socket's role from the presenter cookie when it opens.
+ * reconnects every second. With `presenter` it asks for the presenter role, which the Worker grants only with a valid
+ * session cookie.
  */
 export class SyncClient extends Context.Service<SyncClient, {
   readonly states: Stream.Stream<State>
   readonly goto: (position: Position.Position) => Effect.Effect<void>
 }>()("slidekit/SyncClient") {
-  static readonly layer = (options: { readonly buildId: string }) =>
+  static readonly layer = (options: { readonly buildId: string; readonly presenter: boolean }) =>
     Layer.effect(SyncClient, make(options)).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 }
 
-const make = ({ buildId }: { readonly buildId: string }) =>
+const make = ({ buildId, presenter }: { readonly buildId: string; readonly presenter: boolean }) =>
   Effect.gen(function*() {
     const constructor = yield* Socket.WebSocketConstructor
     // Only the newest Goto matters, so older ones are dropped while offline.
     const outbox = yield* Queue.sliding<string>(1)
-    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`
+    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${presenter ? "?as=presenter" : ""}`
 
     const session = (latest: SubscriptionRef.SubscriptionRef<State | null>) =>
       Effect.gen(function*() {

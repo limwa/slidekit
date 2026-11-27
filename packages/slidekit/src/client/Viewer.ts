@@ -3,24 +3,24 @@ import { Html, HtmlSubscription } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import * as Deck from "../Deck.ts"
 import * as Position from "../Position.ts"
-import { Role, State } from "../protocol.ts"
-import { FitCanvas, type SwipeDirection, TrackSwipe } from "./gestures.ts"
+import { State } from "../protocol.ts"
+import { type SwipeDirection, TrackSwipe } from "./gestures.ts"
 import { routeOf, ViewerRoute } from "./routes.ts"
-import { Reload, SendGoto, SyncClient } from "./SyncClient.ts"
+import { FitStage, Stage } from "./Stage.ts"
+import { Reload, SyncClient } from "./SyncClient.ts"
 
-export const ViewerProps = Schema.Struct({ route: ViewerRoute, host: Schema.String, role: Role, buildId: Schema.String })
+export const ViewerProps = Schema.Struct({ route: ViewerRoute, host: Schema.String, buildId: Schema.String })
 
 /**
- * How the client relates to the room. A viewer is `Free` with no live presenter, `Following` the presenter's
- * position while one is live, or `Detached` after navigating away from it. A presenter is always `Presenting`.
+ * How the viewer relates to the room. It is `Free` with no live presenter, `Following` the presenter's position
+ * while one is live, or `Detached` after navigating away from it.
  */
-export const Mode = Schema.TaggedUnion({ Free: {}, Following: {}, Detached: {}, Presenting: {} })
+export const Mode = Schema.TaggedUnion({ Free: {}, Following: {}, Detached: {} })
 export type Mode = typeof Mode.Type
 
 const free: Mode = { _tag: "Free" }
 const following: Mode = { _tag: "Following" }
 const detached: Mode = { _tag: "Detached" }
-const presenting: Mode = { _tag: "Presenting" }
 
 /** `live` is the room's last State, `null` until the first one arrives. */
 export const ViewerModel = Schema.Struct({ route: ViewerRoute, mode: Mode, live: Schema.NullOr(State) })
@@ -50,14 +50,12 @@ const button = "grid size-7 place-items-center rounded-frame transition-colors h
 
 /** The viewer for one deck: the scaled canvas, the chrome and the input. The route in the URL hash is the position. */
 export const Viewer = (deck: Deck.Deck) => {
-  const width = Deck.canvasWidth
-  const height = Deck.canvasHeight(deck)
   const total = Position.total(deck)
   const positionOf = (route: ViewerRoute) => Position.parse(deck, route.params["*"])
   const canonical = (route: ViewerRoute) => routeOf(positionOf(route))
   const isCanonical = (route: ViewerRoute) => ViewerRoute.print(route) === ViewerRoute.print(canonical(route))
   const goto = (position: Position.Position) => Router.replace(ViewerRoute, routeOf(position)).pipe(Command.asNoop)
-  const fade = deck.transition === "fade" ? "transition-[opacity,visibility] duration-200 ease-out" : ""
+  const fade = deck.transition === "fade"
   /** Navigating away from the live position detaches a follower. Only these inputs detach: a follow's own route change must not. */
   const modeAfterMove = (model: typeof ViewerModel.Type, target: Position.Position): Mode =>
     model.mode._tag === "Following" && !Position.equals(target, positionOf(model.route)) ? detached : model.mode
@@ -69,18 +67,14 @@ export const Viewer = (deck: Deck.Deck) => {
     message: ViewerMessage
   }).make({
     init: ($) => {
-      const { role, route } = $.props
-      const model = { route, mode: role === "presenter" ? presenting : free, live: null }
+      const { route } = $.props
+      const model = { route, mode: free, live: null }
       return isCanonical(route) ? model : $.set(model).run(goto(positionOf(route)))
     },
 
     update: {
       ChangedRoute: ($, { route }) => {
-        if (!isCanonical(route)) return $.evolve({ route }).run(goto(positionOf(route)))
-        // A presenter that has joined the room moves it. Before the first State its moves are its own.
-        return $.model.mode._tag === "Presenting" && $.model.live !== null
-          ? $.evolve({ route }).run(SendGoto.make({ position: positionOf(route) }))
-          : $.evolve({ route })
+        return isCanonical(route) ? $.evolve({ route }) : $.evolve({ route }).run(goto(positionOf(route)))
       },
       ReceivedState: ($, { state }) => {
         if (state.buildId !== $.props.buildId) return $.evolve({ live: state }).run(Reload.make({}))
@@ -90,9 +84,6 @@ export const Viewer = (deck: Deck.Deck) => {
             ? $.evolve({ live: state, mode })
             : $.evolve({ live: state, mode }).run(goto(target))
         switch ($.model.mode._tag) {
-          // A presenter takes the room's position once, when it joins, and moves on its own after that.
-          case "Presenting":
-            return $.model.live === null ? follow(presenting) : $.evolve({ live: state })
           case "Free":
           case "Following":
             return state.presenterLive ? follow(following) : $.evolve({ live: state, mode: free })
@@ -142,7 +133,7 @@ export const Viewer = (deck: Deck.Deck) => {
 
     view: (h, model) => {
       const liveDot = h.span.class("size-1.5 shrink-0 animate-pulse rounded-full bg-accent")
-      const status = ({ live, mode }: typeof model) => {
+      const status = ({ mode }: typeof model) => {
         switch (mode._tag) {
           case "Free":
             return []
@@ -158,29 +149,11 @@ export const Viewer = (deck: Deck.Deck) => {
                 .on("click", ViewerMessage.ClickedBackToLive())
                 .children(h.span.class("size-1.5 rounded-full bg-cream"), "Back to live")
             ]
-          case "Presenting":
-            return [
-              h.span.class("flex shrink-0 items-center gap-1.5 text-accent").children(
-                liveDot,
-                live === null ? "Connecting" : `Presenting · ${live.viewers} viewer${live.viewers === 1 ? "" : "s"}`
-              )
-            ]
         }
       }
       const position = positionOf(model.route)
       const steps = deck.slides[position.slide]!.steps
       const progress = total === 1 ? 1 : Position.index(deck, position) / (total - 1)
-
-      const slides = deck.slides.map((slide, index) => {
-        const current = index === position.slide
-        const step = index < position.slide ? slide.steps - 1 : index > position.slide ? 0 : position.step
-        return h.section
-          .key(String(index))
-          .class("absolute inset-0", fade, current ? "visible opacity-100" : "invisible opacity-0")
-          .attr("aria-hidden", current ? undefined : "true")
-          .attr("inert", current ? undefined : "")
-          .children(slide.view(h, { step }))
-      })
 
       const dots = deck.slides.map((_, index) =>
         h.button
@@ -215,25 +188,8 @@ export const Viewer = (deck: Deck.Deck) => {
             ),
           h.main
             .class("grid min-h-0 flex-1 place-items-center px-3 pt-5 pb-1 sm:px-8 sm:pt-8")
-            .onMount(FitCanvas({ width, height }))
-            .children(
-              h.div
-                .class("relative overflow-hidden rounded-frame bg-cream shadow-[0_1px_2px_rgb(59_26_12/0.06)] ring-1 ring-line")
-                .style({
-                  width: `calc(${width}px * var(--slidekit-scale, 0))`,
-                  height: `calc(${height}px * var(--slidekit-scale, 0))`
-                })
-                .children(
-                  h.div
-                    .class("absolute top-0 left-0 origin-top-left")
-                    .style({
-                      width: `${width}px`,
-                      height: `${height}px`,
-                      transform: "scale(var(--slidekit-scale, 0))"
-                    })
-                    .children(...slides)
-                )
-            ),
+            .onMount(FitStage(deck))
+            .children(Stage(h, deck, position, { fade })),
           h.footer
             .class("flex h-11 shrink-0 items-center gap-3 px-3 font-mono text-[11px] text-ink/70 sm:h-12 sm:px-8 sm:text-xs")
             .children(

@@ -41,8 +41,9 @@ const status = (code: number) => HttpServerResponse.empty({ status: code })
 
 /**
  * The deck's Worker. It runs only for `/ws` and `/present/*`. Static assets serve every other path, `/present`
- * itself included. It hands `/ws` to the one room with the role the socket gets: presenter only with a valid
- * session cookie, which `/present/login` sets for the right presenter code.
+ * itself included. It hands `/ws` to the one room with the role the socket gets: presenter only when the client asks
+ * with `?as=presenter` and has a valid session cookie, which `/present/login` sets for the right presenter code. A
+ * viewer tab in a signed-in browser doesn't ask, so it stays a viewer.
  */
 export default class Deck extends Cloudflare.Worker<Deck>()(
   "Deck",
@@ -91,13 +92,14 @@ export default class Deck extends Cloudflare.Worker<Deck>()(
     return {
       fetch: Effect.gen(function*() {
         const request = yield* HttpServerRequest
-        const path = request.url.split("?")[0]
-        switch (`${request.method} ${path}`) {
+        const url = new URL(request.url, "http://deck")
+        switch (`${request.method} ${url.pathname}`) {
           case "GET /ws": {
             if (request.headers.upgrade !== "websocket") {
               return HttpServerResponse.text("Expected Upgrade: websocket", { status: 426 })
             }
-            const role: Role = (yield* signedIn(request)) ? "presenter" : "viewer"
+            const asks = url.searchParams.get("as") === "presenter"
+            const role: Role = asks && (yield* signedIn(request)) ? "presenter" : "viewer"
             // Setting the header replaces any copy the client sent.
             return yield* room().fetch(request.modify({ headers: Headers.set(request.headers, roleHeader, role) }))
           }
