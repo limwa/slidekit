@@ -70,7 +70,8 @@ export const Viewer = (deck: Deck.Deck) => {
         { key: " ", message: ViewerMessage.RequestedNext() },
         { key: "ArrowLeft", message: ViewerMessage.RequestedPrevious() },
         { key: "PageUp", message: ViewerMessage.RequestedPrevious() },
-        { key: "f", message: ViewerMessage.RequestedFullscreen() }
+        { key: "f", message: ViewerMessage.RequestedFullscreen() },
+        { key: "F", message: ViewerMessage.RequestedFullscreen() }
       ])
     ],
 

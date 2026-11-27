@@ -39,7 +39,7 @@ The CLI then runs Vite programmatically with `.slidekit/` as the root and `../pu
 interface Slide {
 	readonly steps: number // >= 1
 	readonly notes: string
-	readonly view: (h: Html.H<never>, context: { readonly step: number }) => View
+	readonly view: <M>(h: Html.H<M>, context: { readonly step: number }) => View.Input<M> // generic in M, so a slide can render but never send a message
 }
 
 interface Deck {
