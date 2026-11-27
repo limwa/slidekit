@@ -64,15 +64,15 @@ Position arithmetic (`next`, `previous`, `clamp`, `first`, `last`, and parsing a
 
 ### Phase 1. Package, authoring API, viewer
 
-- [ ] Bun workspace with `packages/slidekit` and `examples/demo`. One `effect` version, the spike's pins.
-- [ ] `Deck.make` and `Slide.make`, and the pure position module with unit tests.
-- [ ] The viewer: the fixed canvas scaled to fit, the inset frame, and the chrome (progress bar, deck URL, dots, arrows, the `slide/total` and `step/maxStep` counters, fullscreen).
-- [ ] Hash routing through `BrowserRouter.layerHash`. Reloading `/#/3/2` shows slide 3, step 2.
-- [ ] Input: ←, →, Space, PageUp, PageDown, swipe, chrome arrows, and `F` for fullscreen.
-- [ ] The crossfade between slides, and `transition: "none"`.
-- [ ] The default theme as Tailwind `@theme` tokens, with self-hosted Geist and Geist Mono.
-- [ ] `slidekit dev`, Vite only, serving `examples/demo`. `slidekit build` writes `.slidekit/dist`.
-- [ ] `examples/demo` with at least four slides that use steps.
+- [x] Bun workspace with `packages/slidekit` and `examples/demo`. One `effect` version, the spike's pins.
+- [x] `Deck.make` and `Slide.make`, and the pure position module with unit tests.
+- [x] The viewer: the fixed canvas scaled to fit, the inset frame, and the chrome (progress bar, deck URL, dots, arrows, the `slide/total` and `step/maxStep` counters, fullscreen).
+- [x] Hash routing through `BrowserRouter.layerHash`. Reloading `/#/3/2` shows slide 3, step 2.
+- [x] Input: ←, →, Space, PageUp, PageDown, swipe, chrome arrows, and `F` for fullscreen.
+- [x] The crossfade between slides, and `transition: "none"`.
+- [x] The default theme as Tailwind `@theme` tokens, with self-hosted Geist and Geist Mono.
+- [x] `slidekit dev`, Vite only, serving `examples/demo`. `slidekit build` writes `.slidekit/dist`.
+- [x] `examples/demo` with at least four slides that use steps.
 
 **Check:** run `slidekit dev` in `examples/demo`. In a browser, step through every slide with the keyboard and the chrome. Reload on a deep link. Resize the window to phone width and to a wide window, and confirm that the canvas keeps its ratio and the gutter.
 
