@@ -191,7 +191,7 @@ v1 has no screenshot tests. Visual checks stay manual while the project is a pro
 
 ## First milestone: the spike
 
-The spike proves that the three previews work together on one `effect` version. It is an Effect UI page that connects to the room over a WebSocket, deployed with Alchemy. It lives in [`spike/`](../spike) and is throwaway. See [`spike/README.md`](../spike/README.md) for what it covers and what it leaves out.
+The spike proved that the three previews work together on one `effect` version. It was an Effect UI page that connected to the room over a WebSocket, deployed with Alchemy to workers.dev. Phase 2 replaced it, and it was deleted. Commit `4040305` holds its code and its README.
 
 ## Deferred
 

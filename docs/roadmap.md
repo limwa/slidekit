@@ -8,7 +8,6 @@ This file turns [`design.md`](design.md) into phases. Each phase ends in a check
 package.json            Bun workspace root (private)
 packages/slidekit/      the published package
 examples/demo/          the test-bed deck, a workspace member
-spike/                  the throwaway spike, removed in phase 2
 ```
 
 `packages/slidekit` exports:
@@ -83,7 +82,7 @@ Position arithmetic (`next`, `previous`, `clamp`, `first`, `last`, and parsing a
 - [x] Client sync: following, detached, **Back to live**, and reload on a `buildId` mismatch.
 - [x] `slidekit dev` also runs the Worker and room locally.
 - [x] Tests: the room logic with `@effect/vitest`, and the viewer state machine with Effect UI's `Story` or `Play`.
-- [ ] Delete `spike/`, and destroy its deployment.
+- [x] Delete `spike/`, and destroy its deployment.
 
 **Check:** two browser tabs on `slidekit dev`. Moving the presenter moves the viewer. Navigating in the viewer detaches it, and **Back to live** returns it.
 
