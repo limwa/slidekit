@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Cause, Config, Console, Effect, FileSystem, Option } from "effect"
-import { CliError as CliErrors, Command, Flag } from "effect/cli"
+import { Argument, CliError as CliErrors, Command, Flag } from "effect/cli"
 import { createServer } from "vite"
 import * as Code from "../auth/Code.ts"
 import * as Session from "../auth/Session.ts"
 import * as Deploy from "./deploy.ts"
+import * as Init from "./init.ts"
 import { CliError, result, stderr } from "./output.ts"
 import * as Project from "./project.ts"
 
@@ -201,6 +202,31 @@ const destroy = Command.make(
   )
 )
 
+const init = Command.make(
+  "init",
+  {
+    dir: Argument.String("dir").pipe(
+      Argument.withDescription("Where to create the deck. Defaults to the current directory, which must be empty."),
+      Argument.withDefault(".")
+    ),
+    name: Flag.String("name").pipe(
+      Flag.withDescription(
+        "The deck's package and Worker name, and so its workers.dev subdomain: lowercase letters, digits and dashes. Defaults to the directory name."
+      ),
+      Flag.optional
+    )
+  },
+  ({ dir, name }) =>
+    Effect.gen(function*() {
+      const created = yield* Init.create(dir, name)
+      const cd = created.dir === process.cwd() ? [] : [`  cd ${created.dir}`]
+      yield* result(
+        [`Created deck ${created.name} in ${created.dir}`, "", "Next:", ...cd, "  bun install", "  bun x slidekit dev"]
+          .join("\n")
+      )
+    })
+).pipe(Command.withDescription("Create a deck project: a package, a starter deck with two slides, and its config."))
+
 /** Every failure ends as one line on stderr and exit code 1. */
 const report = <A, E, R>(program: Effect.Effect<A, E, R>) =>
   Effect.catchCause(program, (cause) => {
@@ -213,7 +239,7 @@ const report = <A, E, R>(program: Effect.Effect<A, E, R>) =>
 
 Command.make("slidekit").pipe(
   Command.withDescription("Build, run and deploy live slide decks. No command prompts, so scripts and agents can run each one."),
-  Command.withSubcommands([dev, build, deploy, presenterCode, destroy]),
+  Command.withSubcommands([init, dev, build, deploy, presenterCode, destroy]),
   Command.run({ version: "0.0.0" }),
   report,
   Effect.provide(BunServices.layer),
