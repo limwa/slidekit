@@ -1,0 +1,10 @@
+{
+  "name": "slidekit-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "examples/*"],
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter slidekit test"
+  }
+}

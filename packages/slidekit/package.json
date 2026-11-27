@@ -1,0 +1,33 @@
+{
+  "name": "slidekit",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
+    "./theme.css": "./src/client/theme.css"
+  },
+  "bin": {
+    "slidekit": "./src/cli/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.1.4",
+    "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@22128c6",
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/geist-mono": "^5.2.7",
+    "@tailwindcss/vite": "4.3.5",
+    "effect": "4.1.4",
+    "tailwindcss": "4.3.5",
+    "vite": "8.4.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.1.4",
+    "@types/bun": "latest",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.0"
+  }
+}
