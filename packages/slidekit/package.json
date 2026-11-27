@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client/index.ts",
+    "./worker": "./src/worker/Deck.ts",
     "./theme.css": "./src/client/theme.css"
   },
   "bin": {
@@ -15,16 +16,20 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.87",
     "@effect/platform-bun": "4.1.4",
+    "@effect/platform-node": "4.1.4",
     "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@22128c6",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@tailwindcss/vite": "4.3.5",
+    "alchemy": "2.0.0-beta.87",
     "effect": "4.1.4",
     "tailwindcss": "4.3.5",
     "vite": "8.4.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20261127.1",
     "@effect/vitest": "4.1.4",
     "@types/bun": "1.4.5",
     "typescript": "7.0.2",
