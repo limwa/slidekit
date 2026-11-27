@@ -78,11 +78,11 @@ Position arithmetic (`next`, `previous`, `clamp`, `first`, `last`, and parsing a
 
 ### Phase 2. Sync
 
-- [ ] The room from the spike, plus the 10-second grace alarm and `buildId`.
-- [ ] The Worker, serving `/ws` and leaving the rest to assets.
-- [ ] Client sync: following, detached, **Back to live**, and reload on a `buildId` mismatch.
-- [ ] `slidekit dev` also runs the Worker and room locally.
-- [ ] Tests: the room logic with `@effect/vitest`, and the viewer state machine with Effect UI's `Story` or `Play`.
+- [x] The room from the spike, plus the 10-second grace alarm and `buildId`.
+- [x] The Worker, serving `/ws` and leaving the rest to assets.
+- [x] Client sync: following, detached, **Back to live**, and reload on a `buildId` mismatch.
+- [x] `slidekit dev` also runs the Worker and room locally.
+- [x] Tests: the room logic with `@effect/vitest`, and the viewer state machine with Effect UI's `Story` or `Play`.
 - [ ] Delete `spike/`, and destroy its deployment.
 
 **Check:** two browser tabs on `slidekit dev`. Moving the presenter moves the viewer. Navigating in the viewer detaches it, and **Back to live** returns it.
