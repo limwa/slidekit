@@ -5,8 +5,9 @@ export type Role = typeof Role.Type
 
 export const Position = Schema.Struct({ slide: Schema.Int, step: Schema.Int })
 
+/** A Hello carries no role: the Worker grants one when the socket opens, from the presenter's cookie. */
 export const ClientMessage = Schema.TaggedUnion({
-  Hello: { role: Role, buildId: Schema.String },
+  Hello: { buildId: Schema.String },
   Goto: { position: Position }
 })
 export type ClientMessage = typeof ClientMessage.Type

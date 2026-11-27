@@ -21,7 +21,7 @@ export const mount = (deck: Deck.Deck, options: { readonly buildId: string }): v
   BrowserHost.mount(Viewer(deck), props, container).pipe(
     Layer.provide([
       BrowserRouter.layerHash({ routes: ViewerRoute, scroll: false, focus: false }),
-      Layer.mergeAll(SendGoto.layer, Reload.layer).pipe(Layer.provideMerge(SyncClient.layer({ role, buildId: options.buildId })))
+      Layer.mergeAll(SendGoto.layer, Reload.layer).pipe(Layer.provideMerge(SyncClient.layer({ buildId: options.buildId })))
     ]),
     Layer.launch,
     Effect.runFork

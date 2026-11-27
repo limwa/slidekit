@@ -9,14 +9,15 @@ export const gracePeriod = 10_000
 export interface Room {
   readonly buildId: string
   readonly position: Position
-  /** The sockets that said Hello, by the id in their attachment. */
+  /** The sockets that said Hello, by the id in their attachment, with the role the Worker granted each. */
   readonly sockets: ReadonlyMap<string, Role>
   /** When the grace ends. Set only while no presenter socket is connected and the presenter is still live. */
   readonly graceUntil: number | null
 }
 
 export type Event = Data.TaggedEnum<{
-  Received: { readonly socket: string; readonly data: string }
+  /** `role` is what the Worker granted the socket when it opened, never what the socket says. */
+  Received: { readonly socket: string; readonly role: Role; readonly data: string }
   Closed: { readonly socket: string }
   AlarmFired: {}
 }>
@@ -53,10 +54,10 @@ const withSocket = (room: Room, socket: string, role: Role | undefined): Readonl
   return sockets
 }
 
-/** The room after `event` at time `now`. Only presenters move the position, and undecodable messages change nothing. */
+/** The room after `event` at time `now`. Only presenter sockets move the position, and undecodable messages change nothing. */
 export const step = (room: Room, event: Event, now: number): Transition =>
   Event.$match(event, {
-    Received: ({ socket, data }) =>
+    Received: ({ socket, role, data }) =>
       Option.match(decode(data), {
         onNone: () => unchanged(room),
         onSome: (message) => {
@@ -64,8 +65,8 @@ export const step = (room: Room, event: Event, now: number): Transition =>
             case "Hello":
               return changed({
                 ...room,
-                sockets: withSocket(room, socket, message.role),
-                graceUntil: message.role === "presenter" ? null : room.graceUntil
+                sockets: withSocket(room, socket, role),
+                graceUntil: role === "presenter" ? null : room.graceUntil
               })
             case "Goto":
               return room.sockets.get(socket) === "presenter"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Schema } from "effect"
-import { ClientWire, type ClientMessage } from "../protocol.ts"
+import { ClientWire, type ClientMessage, type Role } from "../protocol.ts"
 import { Event, gracePeriod, type Room, state, step } from "./RoomState.ts"
 
 const encode = Schema.encodeSync(ClientWire)
@@ -17,59 +17,80 @@ const run = (room: Room, ...events: ReadonlyArray<readonly [number, Event]>) =>
     { room, broadcasts: [] as Array<boolean> }
   )
 
-const send = (socket: string, message: ClientMessage) => Event.Received({ socket, data: encode(message) })
-const hello = (socket: string, role: "presenter" | "viewer") => send(socket, { _tag: "Hello", role, buildId: "b1" })
-const goto = (socket: string, slide: number, step = 0) => send(socket, { _tag: "Goto", position: { slide, step } })
-const close = (socket: string) => Event.Closed({ socket })
+/** A socket the Worker opened with `role`, and the events it can cause. */
+const socket = (id: string, role: Role) => {
+  const raw = (data: string) => Event.Received({ socket: id, role, data })
+  const send = (message: ClientMessage) => raw(encode(message))
+  return {
+    raw,
+    hello: send({ _tag: "Hello", buildId: "b1" }),
+    goto: (slide: number, step = 0) => send({ _tag: "Goto", position: { slide, step } }),
+    close: Event.Closed({ socket: id })
+  }
+}
+const presenter = (id: string) => socket(id, "presenter")
+const viewer = (id: string) => socket(id, "viewer")
 
 describe("RoomState", () => {
-  it("lets only presenters move the position", () => {
+  it("lets only presenter sockets move the position", () => {
+    const p = presenter("p")
+    const v = viewer("v")
     const { room, broadcasts } = run(
       empty,
-      [0, hello("p", "presenter")],
-      [0, hello("v", "viewer")],
-      [1, goto("v", 4)],
-      [2, goto("p", 2, 1)],
-      [3, goto("stranger", 5)]
+      [0, p.hello],
+      [0, v.hello],
+      [1, v.goto(4)],
+      [2, p.goto(2, 1)],
+      [3, presenter("stranger").goto(5)]
     )
     expect(state(room).position).toEqual({ slide: 2, step: 1 })
     expect(broadcasts).toEqual([true, true, false, true, false])
   })
 
+  it("takes the role the Worker granted, not the one a Hello claims", () => {
+    const v = viewer("v")
+    const claim = JSON.stringify({ _tag: "Hello", role: "presenter", buildId: "b1" })
+    const { room, broadcasts } = run(empty, [0, v.raw(claim)], [1, v.goto(3)])
+    expect(broadcasts).toEqual([true, false])
+    expect(state(room)).toMatchObject({ position: { slide: 0, step: 0 }, presenterLive: false, viewers: 1 })
+
+    const p = presenter("p")
+    const moved = run(room, [2, p.raw(JSON.stringify({ _tag: "Hello", role: "viewer", buildId: "b1" }))], [3, p.goto(3)])
+    expect(state(moved.room)).toMatchObject({ position: { slide: 3, step: 0 }, presenterLive: true, viewers: 1 })
+  })
+
   it("counts viewers, once per socket", () => {
-    const { room } = run(
-      empty,
-      [0, hello("a", "viewer")],
-      [0, hello("b", "viewer")],
-      [0, hello("b", "viewer")],
-      [0, hello("p", "presenter")]
-    )
+    const b = viewer("b")
+    const { room } = run(empty, [0, viewer("a").hello], [0, b.hello], [0, b.hello], [0, presenter("p").hello])
     expect(state(room).viewers).toBe(2)
-    expect(state(run(room, [1, close("a")]).room).viewers).toBe(1)
+    expect(state(run(room, [1, viewer("a").close]).room).viewers).toBe(1)
   })
 
   it("is not live until a presenter says hello", () => {
-    const viewer = run(empty, [0, hello("v", "viewer")]).room
-    expect(state(viewer).presenterLive).toBe(false)
-    expect(state(run(viewer, [1, hello("p", "presenter")]).room).presenterLive).toBe(true)
+    const room = run(empty, [0, viewer("v").hello]).room
+    expect(state(room).presenterLive).toBe(false)
+    expect(state(run(room, [1, presenter("p").hello]).room).presenterLive).toBe(true)
   })
 
   it("stays live through the grace after the last presenter closes", () => {
-    const { room } = run(empty, [0, hello("p1", "presenter")], [0, hello("p2", "presenter")], [5, close("p1")])
+    const p1 = presenter("p1")
+    const p2 = presenter("p2")
+    const { room } = run(empty, [0, p1.hello], [0, p2.hello], [5, p1.close])
     expect(room.graceUntil).toBeNull()
 
-    const closed = run(room, [7, close("p2")])
+    const closed = run(room, [7, p2.close])
     expect(closed.broadcasts).toEqual([true])
     expect(closed.room.graceUntil).toBe(7 + gracePeriod)
     expect(state(closed.room).presenterLive).toBe(true)
   })
 
   it("ends live when the alarm fires after the grace", () => {
+    const p = presenter("p")
     const { room, broadcasts } = run(
       empty,
-      [0, hello("p", "presenter")],
-      [0, hello("v", "viewer")],
-      [1, close("p")],
+      [0, p.hello],
+      [0, viewer("v").hello],
+      [1, p.close],
       [1 + gracePeriod, Event.AlarmFired()]
     )
     expect(broadcasts.at(-1)).toBe(true)
@@ -84,7 +105,8 @@ describe("RoomState", () => {
   })
 
   it("cancels the grace when a presenter reconnects", () => {
-    const { room } = run(empty, [0, hello("p", "presenter")], [1, close("p")], [4, hello("p-again", "presenter")])
+    const p = presenter("p")
+    const { room } = run(empty, [0, p.hello], [1, p.close], [4, presenter("p-again").hello])
     expect(room.graceUntil).toBeNull()
     expect(state(room).presenterLive).toBe(true)
 
@@ -94,12 +116,14 @@ describe("RoomState", () => {
   })
 
   it("keeps the position after the presenter leaves", () => {
-    const { room } = run(empty, [0, hello("p", "presenter")], [0, goto("p", 3)], [1, close("p")], [2, Event.AlarmFired()])
+    const p = presenter("p")
+    const { room } = run(empty, [0, p.hello], [0, p.goto(3)], [1, p.close], [2, Event.AlarmFired()])
     expect(state(room).position).toEqual({ slide: 3, step: 0 })
   })
 
   it("drops what fails to decode", () => {
-    const { room } = run(empty, [0, hello("p", "presenter")])
+    const p = presenter("p")
+    const { room } = run(empty, [0, p.hello])
     for (
       const data of [
         "garbage",
@@ -107,18 +131,18 @@ describe("RoomState", () => {
         JSON.stringify({ _tag: "Goto" }),
         JSON.stringify({ _tag: "Goto", position: { slide: "1", step: 0 } }),
         JSON.stringify({ _tag: "Goto", position: { slide: 1.5, step: 0 } }),
-        JSON.stringify({ _tag: "Hello", role: "admin", buildId: "b1" }),
+        JSON.stringify({ _tag: "Hello" }),
         JSON.stringify({ _tag: "State", position: { slide: 1, step: 0 }, presenterLive: true, viewers: 0, buildId: "b1" })
       ]
     ) {
-      const next = step(room, Event.Received({ socket: "p", data }), 1)
+      const next = step(room, p.raw(data), 1)
       expect(next.broadcast).toBe(false)
       expect(next.room).toBe(room)
     }
   })
 
   it("ignores a close from a socket that never said hello", () => {
-    const { room } = run(empty, [0, hello("p", "presenter")])
-    expect(step(room, close("anonymous"), 1)).toEqual({ room, broadcast: false })
+    const { room } = run(empty, [0, presenter("p").hello])
+    expect(step(room, viewer("anonymous").close, 1)).toEqual({ room, broadcast: false })
   })
 })
