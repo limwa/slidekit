@@ -124,11 +124,13 @@ One `Schema` union of tagged messages, imported by the client and by the room:
 
 | Message | Sender | Fields |
 | --- | --- | --- |
-| `Hello` | Any client, on connect | `role`, `buildId` |
+| `Hello` | Any client, on connect | `buildId` |
 | `Goto` | Presenter only | `position` |
 | `State` | Room, broadcast | `position`, `presenterLive`, `viewers`, `buildId` |
 
 The room decodes every incoming message and drops what fails to decode.
+
+A client never states its role in a message. The Worker grants the role when the socket opens, as [The presenter](#the-presenter) describes. The room keeps it in the socket's attachment and takes a `Goto` only from a presenter socket.
 
 ### Live presenter
 
@@ -153,11 +155,48 @@ A redeploy during a talk leaves open viewers running the old bundle. The room br
 
 Several presenter devices can be logged in at once, such as a laptop and a phone used as a remote. All of them can move the deck, and the last write wins. `slidekit code rotate` replaces the code and ends existing sessions.
 
-The presenter view shows the current slide and step, the next slide, the speaker notes, an elapsed timer, and the number of connected viewers.
+The presenter view shows the current slide and step, the next position, the speaker notes, an elapsed timer, and the number of connected viewers. The next position is the next step of the slide, or the first step of the next slide. At the last position it reads "End of deck". The timer starts when the view first shows and has a reset.
+
+### Presenter code
+
+A code is 8 characters of Crockford's base32, the digits and the capitals without I, L, O, and U. That is 40 random bits. It shows as `ABCD-EFGH`. Input ignores case, dashes, and spaces, and reads O as 0 and I and L as 1.
+
+The Worker's secret `SLIDEKIT_PRESENTER_CODE_HASH` holds `pbkdf2-sha256$<iterations>$<salt>$<hash>`. The hash is PBKDF2-SHA256 through WebCrypto, with a random 16-byte salt and 100000 iterations, which is the most workerd allows. The check compares in constant time.
+
+### Session cookie
+
+The secret `SLIDEKIT_SESSION_KEY` holds 32 random bytes. A token is `<issued at>.<HMAC-SHA256>`. The MAC covers the issue time and the whole code hash, so a new code ends every session with no stored list of sessions. That way `slidekit code rotate` only has to replace the hash secret. A token is valid for 12 hours.
+
+The cookie is `slidekit_presenter`, set with `HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=43200`. Chromium accepts `Secure` on `http://localhost`, through the Vite proxy too, so `slidekit dev` uses the same cookie. Other browsers are unchecked.
+
+### Who is a presenter
+
+The Worker grants the presenter role at the `/ws` upgrade. It grants it only when the client asks, with `/ws?as=presenter`, and the request carries a valid session cookie. Every other socket is a viewer. The Worker tells the room the role in a header that it sets itself, which replaces any copy the client sent.
+
+The client asks only from `/present`. A viewer tab in a signed-in browser carries the cookie too. If the cookie alone decided the role, that tab would count as a presenter and keep the deck live after the presenter left.
+
+### Login limit
+
+The room counts presenter logins for the whole deck. After 10 failures within 10 minutes, `/present/login` answers 429 until the oldest failure leaves the window, even for the right code. That keeps the 40-bit code out of reach of guessing. A login counts from the moment it begins and stops counting only if its code was right, so concurrent guesses can't slip past the limit. A success clears only its own attempt and leaves other failures in place.
+
+The limit is per deck, not per client. Anyone can lock out new presenter logins for 10 minutes by sending wrong codes. Presenters who are already signed in keep working, because their cookies stay valid.
+
+### Local dev
+
+`slidekit dev` makes a fresh code and session key on every run, or takes the code from `SLIDEKIT_PRESENTER_CODE`. It binds both as the local Worker's secrets and prints the code at startup.
 
 ## The Worker
 
-The Worker runs code only for `/present*` and `/ws`. Cloudflare's static asset layer serves every other path directly. Hash routing makes that possible, because every deck URL is `/` to the server.
+The Worker runs code only for `/present/*` and `/ws`. Cloudflare's static asset layer serves every other path directly, `/present` itself included. Hash routing makes that possible, because every deck URL is `/` or `/present` to the server.
+
+| Route | Answer |
+| --- | --- |
+| `GET /ws` | The WebSocket upgrade, handed to the room with the granted role. |
+| `POST /present/login` | Takes `{ "code": "..." }` as JSON. Answers 204 with the session cookie, 401 for a wrong code, or 429 when the login limit is reached. |
+| `GET /present/session` | 200 with a valid session cookie, 401 without one. |
+| `POST /present/logout` | 204, and clears the cookie. |
+
+In `slidekit dev`, Vite proxies `/ws` and the three `/present/` routes to the local Worker, and serves `/present` itself.
 
 ## Deploy and local dev
 

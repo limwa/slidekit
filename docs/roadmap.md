@@ -88,9 +88,9 @@ Position arithmetic (`next`, `previous`, `clamp`, `first`, `last`, and parsing a
 
 ### Phase 3. Presenter
 
-- [ ] Presenter code hash and cookie signing key as Worker secrets.
-- [ ] `/present` login, the signed `HttpOnly` cookie, and the cookie check on the presenter socket.
-- [ ] The presenter view: current slide, next slide, notes, elapsed timer, and viewer count.
+- [x] Presenter code hash and cookie signing key as Worker secrets.
+- [x] `/present` login, the signed `HttpOnly` cookie, and the cookie check on the presenter socket.
+- [x] The presenter view: current slide, next position, notes, elapsed timer, and viewer count.
 
 **Check:** a wrong code is refused. A viewer socket that claims the presenter role cannot move the deck.
 

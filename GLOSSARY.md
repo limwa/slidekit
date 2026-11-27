@@ -66,6 +66,10 @@ _Avoid_: Unsynced, free mode
 The secret a presenter enters at `/present`. The Worker stores only its hash.
 _Avoid_: Password, PIN, token
 
+**Presenter session**:
+One signed-in presenter device, held as a signed cookie for 12 hours. A new presenter code ends every presenter session.
+_Avoid_: Login (for the state), token (for the concept)
+
 **Build id**:
 The id of one deployed bundle. A client whose build id differs from the room's reloads.
 _Avoid_: Version, hash
