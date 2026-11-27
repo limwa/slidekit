@@ -18,7 +18,10 @@ const write = Effect.fn("write")(function*(buildId: string) {
   }
   yield* fs.makeDirectory(project.dir, { recursive: true })
   for (const [name, content] of Object.entries(project.files)) {
-    yield* fs.writeFileString(path.join(project.dir, name), content)
+    const file = path.join(project.dir, name)
+    // Unchanged files stay untouched, so a running `slidekit dev` doesn't reload its pages.
+    if ((yield* fs.exists(file)) && (yield* fs.readFileString(file)) === content) continue
+    yield* fs.writeFileString(file, content)
   }
   return project
 })

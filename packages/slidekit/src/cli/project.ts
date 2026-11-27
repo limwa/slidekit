@@ -48,10 +48,13 @@ export const make = (root: string, buildId: string): Project => {
   </body>
 </html>
 `,
+    // The build id comes from Vite's `define`, so `slidekit dev` and `slidekit build` never overwrite each other's.
     "entry.ts": `import { mount } from "slidekit/client"
 import deck from "../slidekit.config.ts"
 
-mount(deck, { buildId: ${JSON.stringify(buildId)} })
+declare const __SLIDEKIT_BUILD_ID__: string
+
+mount(deck, { buildId: __SLIDEKIT_BUILD_ID__ })
 `,
     "styles.css": `@import "${relative(tailwindCss)}" source(none);
 @import "${relative(path.join(clientDir, "theme.css"))}";
@@ -72,6 +75,7 @@ mount(deck, { buildId: ${JSON.stringify(buildId)} })
       publicDir: path.join(root, "public"),
       cacheDir: path.join(dir, "cache"),
       plugins: [tailwindcss()],
+      define: { __SLIDEKIT_BUILD_ID__: JSON.stringify(buildId) },
       build: { outDir: dist, emptyOutDir: true },
       server: { fs: { allow: [searchForWorkspaceRoot(root), root, packageDir] } }
     }
