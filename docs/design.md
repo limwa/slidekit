@@ -45,7 +45,7 @@ my-talk/
 	public/
 ```
 
-`slidekit init` creates the project. The project name becomes the Worker name and so the `workers.dev` subdomain. Several decks in one repo are several projects in a workspace.
+`slidekit init` creates the project. The project name becomes the Worker name and so the `workers.dev` subdomain. `slidekit init` takes it from `--name` or the directory name, and it must be lowercase letters, digits, and dashes. Init writes `package.json`, `tsconfig.json`, `.gitignore`, `slidekit.config.ts` with a starter deck of two slides, `src/slides/`, and an empty `public/`. It refuses a directory that is not empty. Inside the slidekit workspace the deck depends on `slidekit@workspace:*`, and elsewhere on the version of slidekit that ran init. Several decks in one repo are several projects in a workspace.
 
 An explicit array sets the slide order. Reordering is then a one-line diff that the type checker sees.
 
@@ -148,7 +148,7 @@ A redeploy during a talk leaves open viewers running the old bundle. The room br
 
 `/present` serves the same app bundle, which starts in presenter mode when it sees that path.
 
-1. `slidekit deploy` generates a presenter code on the first deploy, or accepts one. It prints the code once.
+1. `slidekit deploy` generates a presenter code on the first deploy of a stage, or accepts one. It prints the code once. Later deploys keep it, as [Presenter secrets across deploys](#presenter-secrets-across-deploys) describes.
 2. The Worker stores only a hash of the code, as a secret. A second secret is the key that signs session cookies.
 3. The `/present` login form posts to `/present/login`. The Worker checks the code and sets a signed `HttpOnly` cookie.
 4. The presenter WebSocket requires that cookie.
@@ -204,19 +204,57 @@ In `slidekit dev`, Vite proxies `/ws` and the three `/present/` routes to the lo
 
 Slidekit builds the Alchemy stack itself, and the stack stays hidden from authors and agents. The stack contains the Worker, the room Durable Object, the built Vite assets, the presenter code hash, and the cookie signing key. An escape hatch for extra bindings can come later.
 
+Dev, deploy, rotate, and destroy all plan that one stack through one runner. A plan is only a read. Nothing changes until its apply runs.
+
 Commands:
 
 | Command | What it does |
 | --- | --- |
-| `slidekit init` | Creates a deck project. |
-| `slidekit dev` | Runs Vite with HMR and runs the Worker and room locally in workerd. Sync works across two browser tabs. |
-| `slidekit deploy` | Builds the deck and deploys it with `Alchemist.plan` and `Alchemist.apply`. |
-| `slidekit code rotate` | Replaces the presenter code and ends presenter sessions. |
-| `slidekit destroy` | Removes the deck's Cloudflare resources. |
+| `slidekit init [dir] [--name]` | Creates a deck project. |
+| `slidekit dev [--port]` | Runs Vite with HMR and runs the Worker and room locally in workerd. Sync works across two browser tabs. |
+| `slidekit build` | Builds the app into `.slidekit/dist`. |
+| `slidekit deploy [--stage] [--code] [--profile] [--dry-run] [--json]` | Builds the deck and deploys it with `Alchemist.plan` and `Alchemist.apply`. |
+| `slidekit code rotate [--stage] [--code] [--profile] [--json]` | Replaces the presenter code, redeploys, and ends presenter sessions. |
+| `slidekit destroy [--stage] [--yes] [--profile] [--json]` | Removes the deck's Cloudflare resources. |
+
+### Stages
+
+A stage is one deploy of a deck. `slidekit deploy`, `code rotate`, and `destroy` act on stage `production` unless `--stage` names another. A stage name uses lowercase letters, digits, and inner dashes.
+
+- Stage `production` deploys as the Worker named after the deck, at `<deck>.<account>.workers.dev`.
+- Any other stage deploys as its own Worker, `<deck>-<stage>`, so two stages never share a Worker or a room. The name must fit in 63 characters.
+- `slidekit dev` runs stage `dev` in local workerd. No deploy command accepts `--stage dev`, because planning that local state against Cloudflare would mistake it for real resources.
 
 Deploy state lives in the deck's `.alchemy/` directory, which git ignores. A remote state store becomes relevant once decks deploy from CI or from more than one machine.
 
-Credentials come from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or from an Alchemy profile. No command prompts when those are set, so an agent can run every command.
+### Presenter secrets across deploys
+
+The plaintext presenter code is never stored. Each stage keeps `{ codeHash, sessionKey }` in `.alchemy/slidekit/<stage>.json`, readable only by its owner (mode 0600). A write goes to a temporary file that is then renamed into place. Every deploy binds both values as the Worker's secrets.
+
+| Deploy | Code hash | Session key | Prints a code |
+| --- | --- | --- | --- |
+| First deploy of a stage | From `--code`, `SLIDEKIT_PRESENTER_CODE`, or a fresh code | Fresh | Yes |
+| Later deploy | Kept | Kept | No |
+| Later deploy with a code that differs from the current one | Replaced | Kept | Yes |
+| Later deploy with the current code | Kept | Kept | No |
+| `slidekit code rotate` | From `--code` or a fresh code | Kept | Yes |
+| `--dry-run` | Planned only | Planned only | No |
+
+A later deploy keeps presenters signed in. A new code hash ends every session and every login lockout, as [The presenter](#the-presenter) describes. The current code changes nothing, because a fresh hash of it, with a new salt, would still end every session. Rotating a stage that has never been deployed fails.
+
+The file changes only after the apply succeeds. A deploy that fails leaves the file as it was, and the next deploy pushes that file's secrets again. `slidekit destroy --yes` deletes the file after the Worker is gone.
+
+### Flags and output
+
+- `--dry-run` builds and plans, prints the plan, and stops. It writes no secrets file and prints no code.
+- `destroy` without `--yes` prints the plan of what it would remove and exits with 1. With `--yes` it destroys.
+- `--json` prints one JSON object on stdout. A deploy prints `{ url, presentUrl, stage, code? }`, and `code` appears only when it is new. A dry run prints `{ dryRun: true, stage, worker, changes, summary, resources }`. A destroy prints `{ destroyed, stage, worker, changes, summary, resources }`.
+- Logs go to stderr for every command, so stdout holds only the result. The deploy build runs Vite at log level `warn`, because rolldown's progress lines go straight to stdout.
+- A failure prints one line, `slidekit: <message>`, on stderr and exits with 1.
+
+### Credentials
+
+Credentials come from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, or from an Alchemy profile: `--profile`, then `ALCHEMY_PROFILE`, then `default`. The two variables win over any profile. Alchemist resolves credentials lazily, so a plan would succeed without them. Deploy, rotate, and destroy therefore check first that the variables are set or the profile has a Cloudflare account, and otherwise fail with a message that names both options. No command prompts, so an agent can run every command.
 
 ## Repository
 

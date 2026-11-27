@@ -96,8 +96,8 @@ Position arithmetic (`next`, `previous`, `clamp`, `first`, `last`, and parsing a
 
 ### Phase 4. CLI lifecycle
 
-- [ ] `slidekit deploy` through `Alchemist.plan` and `Alchemist.apply`, with the stack built inside slidekit.
-- [ ] `slidekit destroy` and `slidekit code rotate`.
-- [ ] `slidekit init`.
+- [x] `slidekit deploy` through `Alchemist.plan` and `Alchemist.apply`, with the stack built inside slidekit.
+- [x] `slidekit destroy` and `slidekit code rotate`.
+- [x] `slidekit init`.
 
 **Check:** `slidekit init` a new deck, deploy it, present it from a phone, and destroy it.

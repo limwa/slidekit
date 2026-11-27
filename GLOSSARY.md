@@ -73,3 +73,9 @@ _Avoid_: Login (for the state), token (for the concept)
 **Build id**:
 The id of one deployed bundle. A client whose build id differs from the room's reloads.
 _Avoid_: Version, hash
+
+## Deploy
+
+**Stage**:
+One deploy of a deck, with its own Worker, room and presenter code. `production` is the default stage and deploys as the deck's own Worker. `dev` is the local stage of `slidekit dev`.
+_Avoid_: Environment, deployment (for the name)
