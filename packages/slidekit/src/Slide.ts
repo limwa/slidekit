@@ -1,11 +1,12 @@
-import type { View } from "@effect/ui"
+import type { View as UiView } from "@effect/ui"
 import type { Html } from "@effect/ui/html"
 
 export interface Context {
   readonly step: number
 }
 
-export type View = (h: Html.H<never>, context: Context) => View.Input<never>
+/** A slide is a pure view of its step. It is generic in the message type, so it can render but never send one. */
+export type View = <M>(h: Html.H<M>, context: Context) => UiView.Input<M>
 
 export interface Slide {
   readonly steps: number
