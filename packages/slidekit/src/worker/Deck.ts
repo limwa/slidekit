@@ -3,6 +3,8 @@ import { Clock, Config, Context, Duration, Effect, Redacted, Schema } from "effe
 import * as Headers from "effect/http/Headers"
 import { HttpServerRequest, schemaBodyJson } from "effect/http/HttpServerRequest"
 import * as HttpServerResponse from "effect/http/HttpServerResponse"
+import { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment"
+import * as Attempts from "../auth/Attempts.ts"
 import * as Code from "../auth/Code.ts"
 import * as Session from "../auth/Session.ts"
 import type { Role } from "../protocol.ts"
@@ -66,6 +68,8 @@ export default class Deck extends Cloudflare.Worker<Deck>()(
     const codeHash = yield* Config.Redacted(codeHashBinding)
     const sessionKey = yield* Config.Redacted(sessionKeyBinding)
     const secrets: Session.Secrets = { key: Redacted.value(sessionKey), codeHash: Redacted.value(codeHash) }
+    const env = yield* WorkerEnvironment
+    const attemptScope = yield* Attempts.scope(secrets.codeHash, String(env[buildIdBinding] ?? ""))
     const room = () => rooms.getByName("deck")
 
     const signedIn = (request: HttpServerRequest) =>
@@ -78,10 +82,10 @@ export default class Deck extends Cloudflare.Worker<Deck>()(
       const body = yield* Effect.option(schemaBodyJson(LoginBody))
       if (body._tag === "None") return status(400)
       // The limit comes first, so a locked-out deck refuses even the right code.
-      const { allowed, at } = yield* room().beginLogin()
+      const { allowed, at } = yield* room().beginLogin(attemptScope)
       if (!allowed) return status(429)
       if (!(yield* Code.verify(body.value.code, secrets.codeHash))) return status(401)
-      yield* room().succeededLogin(at)
+      yield* room().succeededLogin(attemptScope, at)
       const token = yield* Session.sign(secrets, yield* Clock.currentTimeMillis)
       return yield* HttpServerResponse.setCookie(status(204), Session.cookieName, token, {
         ...sessionCookie,

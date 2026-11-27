@@ -181,6 +181,8 @@ The room counts presenter logins for the whole deck. After 10 failures within 10
 
 The limit is per deck, not per client. Anyone can lock out new presenter logins for 10 minutes by sending wrong codes. Presenters who are already signed in keep working, because their cookies stay valid.
 
+The count belongs to one presenter code on one build. The Worker passes the room a SHA-256 fingerprint of the code hash and the build id, and a count stored under another fingerprint starts over. So `slidekit code rotate` and a new deploy each end a lockout. Only the deck's owner can do either, so an attacker can't use them to clear a count. Restarting `slidekit dev` makes a new build id, so a restart ends a local lockout even when `SLIDEKIT_PRESENTER_CODE` keeps the same code. Session cookies are not tied to the build, so a redeploy during a talk keeps the presenter signed in.
+
 ### Local dev
 
 `slidekit dev` makes a fresh code and session key on every run, or takes the code from `SLIDEKIT_PRESENTER_CODE`. It binds both as the local Worker's secrets and prints the code at startup.

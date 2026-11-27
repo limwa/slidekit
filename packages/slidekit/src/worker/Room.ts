@@ -89,9 +89,8 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
         return attachment ? handle(RoomState.Event.Closed({ socket: attachment.id }), socket) : Effect.void
       }
 
-      const attempts = state.storage.get<Attempts.Attempts>(attemptsKey).pipe(
-        Effect.map((stored) => stored ?? Attempts.empty)
-      )
+      const attempts = (scope: string) =>
+        state.storage.get<unknown>(attemptsKey).pipe(Effect.map((stored) => Attempts.within(stored, scope)))
 
       return {
         fetch: Effect.gen(function*() {
@@ -115,17 +114,20 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
         }),
         webSocketError: (socket: Cloudflare.WebSocket) => closed(socket),
         alarm: () => handle(RoomState.Event.AlarmFired()),
-        /** Begins a presenter login. `at` names it to `succeededLogin` once its code checks out. */
-        beginLogin: () =>
+        /**
+         * Begins a presenter login, counted within `scope` (see `Attempts.scope`). `at` names it to `succeededLogin`
+         * once its code checks out.
+         */
+        beginLogin: (scope: string) =>
           Effect.gen(function*() {
             const now = yield* Clock.currentTimeMillis
-            const begun = Attempts.begin(yield* attempts, now)
+            const begun = Attempts.begin(yield* attempts(scope), now)
             yield* state.storage.put(attemptsKey, begun.attempts)
             return { allowed: begun.allowed, at: now }
           }),
-        succeededLogin: (at: number) =>
+        succeededLogin: (scope: string, at: number) =>
           Effect.gen(function*() {
-            yield* state.storage.put(attemptsKey, Attempts.succeeded(yield* attempts, at))
+            yield* state.storage.put(attemptsKey, Attempts.succeeded(yield* attempts(scope), at))
           })
       }
     })

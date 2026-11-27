@@ -109,11 +109,30 @@ describe("Attempts", () => {
   const minute = 60_000
 
   /** Fails `count` logins, one a second from `start`. */
-  const failing = (count: number, start = 0) =>
+  const failing = (count: number, start = 0, scope = "scope") =>
     Array.from({ length: count }, (_, i) => start + i * 1000).reduce(
       (attempts, at) => Attempts.begin(attempts, at).attempts,
-      Attempts.empty
+      Attempts.empty(scope)
     )
+
+  it.effect("starts the count over for a new code or a new build", () =>
+    Effect.gen(function*() {
+      const scope = yield* Attempts.scope("hash-a", "build-1")
+      const locked = failing(10, 0, scope)
+      expect(Attempts.begin(Attempts.within(locked, scope), 10 * 1000).allowed).toBe(false)
+
+      expect(yield* Attempts.scope("hash-a", "build-1")).toBe(scope)
+      for (const other of [yield* Attempts.scope("hash-b", "build-1"), yield* Attempts.scope("hash-a", "build-2")]) {
+        expect(other).not.toBe(scope)
+        expect(Attempts.begin(Attempts.within(locked, other), 10 * 1000).allowed).toBe(true)
+      }
+    }))
+
+  it("treats a count stored in any other shape as no count", () => {
+    for (const stored of [undefined, null, [1, 2, 3], { times: [1] }, { scope: "scope", times: "x" }]) {
+      expect(Attempts.within(stored, "scope")).toEqual(Attempts.empty("scope"))
+    }
+  })
 
   it("refuses once 10 logins failed in 10 minutes", () => {
     expect(Attempts.begin(failing(9), 9 * 1000).allowed).toBe(true)
@@ -128,13 +147,13 @@ describe("Attempts", () => {
     const ten = failing(10)
     expect(Attempts.begin(ten, 10 * minute - 1).allowed).toBe(false)
     expect(Attempts.begin(ten, 10 * minute).allowed).toBe(true)
-    expect(Attempts.begin(ten, 10 * minute + 9 * 1000).attempts).toHaveLength(1)
+    expect(Attempts.begin(ten, 10 * minute + 9 * 1000).attempts.times).toHaveLength(1)
   })
 
   it("stops counting a login that succeeded, and keeps the other failures", () => {
     const nine = failing(9)
     const begun = Attempts.begin(nine, 20 * 1000)
-    expect(begun.attempts).toHaveLength(10)
+    expect(begun.attempts.times).toHaveLength(10)
     const after = Attempts.succeeded(begun.attempts, 20 * 1000)
     expect(after).toEqual(nine)
     expect(Attempts.begin(after, 21 * 1000).allowed).toBe(true)
