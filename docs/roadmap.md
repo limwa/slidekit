@@ -101,3 +101,14 @@ Position arithmetic (`next`, `previous`, `clamp`, `first`, `last`, and parsing a
 - [x] `slidekit init`.
 
 **Check:** `slidekit init` a new deck, deploy it, present it from a phone, and destroy it.
+
+Done on 2026-11-27, with `examples/demo` deployed to stage `phase4-check`:
+
+- [x] `slidekit deploy --json` printed only the JSON on stdout, and wrote the stage's secrets file with mode 600.
+- [x] On workers.dev: assets, `/present` and `/ws` routing, login (401, then 204 with the `HttpOnly; Secure; SameSite=Strict` cookie), and a cookieless socket that claims presenter unable to move the deck.
+- [x] In a browser: signed in through the form with the code typed in lower case and without the dash, and a viewer at phone size (844×390) followed the presenter.
+- [x] A second deploy printed no code, kept the secrets file, and kept the presenter signed in.
+- [x] `slidekit code rotate` printed a new code, ended the old session, and refused the old code.
+- [x] `slidekit destroy` without `--yes` exited 1 and changed nothing. With `--yes` it removed the Worker (404) and the secrets file.
+
+The phone was emulated by the browser's viewport, not a real device, and `slidekit init` was checked locally only, not deployed.
